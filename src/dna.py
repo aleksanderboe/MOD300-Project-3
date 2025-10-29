@@ -69,11 +69,24 @@ class Sphere:
         return f"SPHERE X: {round(self.center.x, 2)} Y: {round(self.center.y, 2)} Z: {round(self.center.z, 2)} Radius: {round(self.radius, 2)}"
 
     def is_point_inside(self, point: Point):
+        """
+        Checks if a point is within 3D Sphere
+
+        :params: A point to check that is within Sphere
+
+        :return: Boolean that represents if point is within sphere
+         """
+
         distance = math.sqrt((point.x - self.center.x)**2 + (point.y - self.center.y)**2 + (point.z - self.center.z)**2)
 
         return distance <= self.radius
     
     def get_volume(self) -> float:
+        """
+        calculates volume of 3D Sphere
+
+        :return: float representing volume
+        """
         return (4/3) * math.pi * self.radius**3
 
 
