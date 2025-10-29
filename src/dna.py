@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import matplotlib.pyplot as plt
 
 class SimulationBox:
     """
@@ -21,6 +22,11 @@ class SimulationBox:
         self.x_lower = x_lower
         self.y_lower = y_lower
         self.z_lower = z_lower
+
+    def get_volume(self):
+        return ((self.x_upper - self.x_lower) *
+         (self.y_upper - self.y_lower) *
+         (self.z_upper - self.z_lower))
 
 class Point:
     """
@@ -66,6 +72,9 @@ class Sphere:
         distance = math.sqrt((point.x - self.center.x)**2 + (point.y - self.center.y)**2 + (point.z - self.center.z)**2)
 
         return distance <= self.radius
+    
+    def get_volume(self) -> float:
+        return (4/3) * math.pi * self.radius**3
 
 
 def create_random_point(box: SimulationBox) -> Point:
@@ -109,3 +118,23 @@ def create_random_sphere(box: SimulationBox) -> Sphere:
 
     center = Point(x, y, z)
     return Sphere(center, radius)
+
+def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000):
+    points_inside = 0
+    fractions = []
+
+    for i in range(1, n_points + 1):
+        point = create_random_point(box)
+        if sphere.is_point_inside(point):
+            points_inside += 1
+        fractions.append(points_inside / i)
+
+    fraction_estimate = points_inside / n_points
+    print("Monte Carlo fraction:", fraction_estimate)
+
+    plt.plot(range(1, n_points + 1), fractions)
+    plt.xlabel("Number of points generated")
+    plt.ylabel("Fraction inside sphere")
+    plt.title("Monte Carlo estimation of points inside sphere")
+    plt.grid(True)
+    plt.show()
