@@ -1,6 +1,5 @@
 import numpy as np
-
-# NOTE: Bruke dataclass istedenfor 
+import math
 
 class SimulationBox:
     """
@@ -15,10 +14,13 @@ class SimulationBox:
     z : float
         the upper z bound of the box
     """
-    def __init__(self, x_upper: float, y_upper: float, z_upper: float):
+    def __init__(self, x_upper: float, y_upper: float, z_upper: float, x_lower=0, y_lower=0, z_lower=0):
         self.x_upper = x_upper
         self.y_upper = y_upper
         self.z_upper = z_upper
+        self.x_lower = x_lower
+        self.y_lower = y_lower
+        self.z_lower = z_lower
 
 class Point:
     """
@@ -38,6 +40,10 @@ class Point:
         self.y = y
         self.z = z
 
+    def __str__(self):
+        return f"POINT Center: X {round(self.x, 2)} Y {round(self.y, 2)} Z {round(self.z, 2)}"
+
+
 class Sphere:
     """
     A class used to represent a sphere
@@ -53,6 +59,15 @@ class Sphere:
         self.center = center
         self.radius = radius
 
+    def __str__(self):
+        return f"SPHERE X: {round(self.center.x, 2)} Y: {round(self.center.y, 2)} Z: {round(self.center.z, 2)} Radius: {round(self.radius, 2)}"
+
+    def is_point_inside(self, point: Point):
+        distance = math.sqrt((point.x - self.center.x)**2 + (point.y - self.center.y)**2 + (point.z - self.center.z)**2)
+
+        return distance <= self.radius
+
+
 def create_random_point(box: SimulationBox) -> Point:
     """
      Creates an random point within the 3D simulation box.
@@ -63,18 +78,34 @@ def create_random_point(box: SimulationBox) -> Point:
     """
     x = np.random.uniform(0, box.x_upper)
     y = np.random.uniform(0, box.y_upper)
-    z = np.random.uniform(0, box.z_upper)   
+    z = np.random.uniform(0, box.z_upper)
     return Point(x,y,z)
 
-def create_random_sphere(box) -> Sphere:
+def create_random_sphere(box: SimulationBox) -> Sphere:
     """
-     Creates an random sphere within the 3D simulation box.
+    Creates a random sphere within the 3D simulation box.
 
-     :params: A box
+    Parameters
+    ----------
+    box : SimulationBox
+        The box within which to create the sphere.
 
-     :return: A Sphere randomly generated inside the simulation box. 
+    Returns
+    -------
+    Sphere
+        A sphere whose entire volume is inside the box.
     """
-    center = create_random_point(box)
-    radius = np.random.uniform(0, box.x_upper) # NOTE: bruke någe annet enn box.x_upper ?
+    max_radius = min(
+        box.x_upper - box.x_lower,
+        box.y_upper - box.y_lower,
+        box.z_upper - box.z_lower
+    ) / 2
 
+    radius = np.random.uniform(0, max_radius)
+
+    x = np.random.uniform(box.x_lower + radius, box.x_upper - radius)
+    y = np.random.uniform(box.y_lower + radius, box.y_upper - radius)
+    z = np.random.uniform(box.z_lower + radius, box.z_upper - radius)
+
+    center = Point(x, y, z)
     return Sphere(center, radius)
