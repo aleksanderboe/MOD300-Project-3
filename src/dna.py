@@ -102,19 +102,18 @@ def create_random_point(box: SimulationBox) -> Point:
     y = np.random.uniform(0, box.y_upper)
     z = np.random.uniform(0, box.z_upper)
     return Point(x,y,z)
+    
 
 def create_random_sphere(box: SimulationBox) -> Sphere:
     """
     Creates a random sphere within the 3D simulation box.
 
-    Parameters
+    :params:
     ----------
-    box : SimulationBox
+    box: SimulationBox
         The box within which to create the sphere.
 
-    Returns
-    -------
-    Sphere
+    :return: Sphere
         A sphere whose entire volume is inside the box.
     """
     max_radius = min(
@@ -132,7 +131,23 @@ def create_random_sphere(box: SimulationBox) -> Sphere:
     center = Point(x, y, z)
     return Sphere(center, radius)
 
-def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000):
+def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False):
+    """
+    Estimates the fraction of points inside a sphere using the Monte Carlo method.
+
+    :params:
+    sphere: Sphere
+        The sphere to generate points inside
+    box: SimulationBox
+        The box to generate points inside
+    n_points: int
+        The number of points to generate
+    plot: bool
+        Whether to plot the results
+
+    :return: float
+        The estimated fraction of points inside the sphere
+    """
     points_inside = 0
     fractions = []
 
@@ -143,11 +158,31 @@ def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000):
         fractions.append(points_inside / i)
 
     fraction_estimate = points_inside / n_points
-    print("Monte Carlo fraction:", fraction_estimate)
 
-    plt.plot(range(1, n_points + 1), fractions)
-    plt.xlabel("Number of points generated")
-    plt.ylabel("Fraction inside sphere")
-    plt.title("Monte Carlo estimation of points inside sphere")
-    plt.grid(True)
-    plt.show()
+    if plot:
+        plt.plot(range(1, n_points + 1), fractions)
+        plt.xlabel("Number of points generated")
+        plt.ylabel("Fraction inside sphere")
+        plt.title("Monte Carlo estimation of points inside sphere")
+        plt.grid(True)
+        plt.show()
+    return fraction_estimate
+
+def estimate_pi(n_points, sphere, box):
+    """"
+    Estimates π using the Monte Carlo method.
+
+    :params:
+    n_points: int
+        The number of points to generate
+    sphere: Sphere
+        The sphere to generate points inside
+    box: SimulationBox
+        The box to generate points inside
+
+    :return: float
+        The estimated value of π
+    """
+    fraction = monte_carlo_fraction_inside_sphere(sphere, box, n_points, plot=False)
+    pi_estimate = (3/4) * fraction * (box.get_volume() / (sphere.radius**3))
+    return pi_estimate
