@@ -160,12 +160,19 @@ def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False
     fraction_estimate = points_inside / n_points
 
     if plot:
-        plt.plot(range(1, n_points + 1), fractions)
+        plt.plot(range(1, n_points + 1), fractions, label="Monte Carlo estimate")
+        expected_fraction = sphere.get_volume() / box.get_volume()
+
+        plt.axhline(expected_fraction, linestyle="--", label="Expected fraction")
         plt.xlabel("Number of points generated")
         plt.ylabel("Fraction inside sphere")
         plt.title("Monte Carlo estimation of points inside sphere")
         plt.grid(True)
         plt.show()
+
+        print(f"Expected fraction: {expected_fraction}")
+        print(f"Monte Carlo estimate: {fraction_estimate}")
+
     return fraction_estimate
 
 def estimate_pi(n_points, sphere, box):
