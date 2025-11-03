@@ -131,7 +131,7 @@ def create_random_sphere(box: SimulationBox) -> Sphere:
     center = Point(x, y, z)
     return Sphere(center, radius)
 
-def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False):
+def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False, plot_points=5000):
     """
     Estimates the fraction of points inside a sphere using the Monte Carlo method.
 
@@ -144,36 +144,55 @@ def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False
         The number of points to generate
     plot: bool
         Whether to plot the results
+    plot_points: int 
+        Numbers of random points, used ONLY for plotting. 
+
 
     :return: float
         The estimated fraction of points inside the sphere
     """
+
+    if isinstance(sphere, (list, tuple)): 
+        spheres = sphere
+        estimates = [monte_carlo_fraction_inside_sphere(s, box, n_points=n_points, plot=False) for s in spheres]
+        
+        if plot:
+
+            points = []
+            in_any = []
+            for _ in range(plot_points): 
+                p = create_random_point(box)
+                points.append([p.x, p.y, p.z])
+                in_any.append(any(s.is_point_inside(p) for s in spheres))
+
+            points = np.array(points)
+            in_any = np.array(in_any)
+            
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+
+            outside = points[~in_any]
+            inside = points[in_any]
+
+            ax.scatter(outside[:,0], outside[:,1], outside[:,2], s=4, color='blue', alpha=0.3)
+            ax.scatter(inside[:,0], inside[:,1], inside[:,2], s=6, color='red', alpha=0.8)
+
+            for s in spheres:
+                ax.scatter(s.center.x, s.center.y, s.center.z, s=40, color='black')
+
+            ax.set_title("Points inside 10 spheres")
+            ax.set_xlabel("X")
+            ax.set_ylabel("Y")
+            ax.set_zlabel("Z")
+            plt.show()
+
+        return estimates
+    
     points_inside = 0
-    fractions = []
-
-    for i in range(1, n_points + 1):
-        point = create_random_point(box)
-        if sphere.is_point_inside(point):
+    for _ in range(n_points):
+        if sphere.is_point_inside(create_random_point(box)): 
             points_inside += 1
-        fractions.append(points_inside / i)
-
-    fraction_estimate = points_inside / n_points
-
-    if plot:
-        plt.plot(range(1, n_points + 1), fractions, label="Monte Carlo estimate")
-        expected_fraction = sphere.get_volume() / box.get_volume()
-
-        plt.axhline(expected_fraction, linestyle="--", label="Expected fraction")
-        plt.xlabel("Number of points generated")
-        plt.ylabel("Fraction inside sphere")
-        plt.title("Monte Carlo estimation of points inside sphere")
-        plt.grid(True)
-        plt.show()
-
-        print(f"Expected fraction: {expected_fraction}")
-        print(f"Monte Carlo estimate: {fraction_estimate}")
-
-    return fraction_estimate
+    return points_inside / n_points
 
 def estimate_pi(n_points, sphere, box):
     """"
