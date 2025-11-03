@@ -131,7 +131,44 @@ def create_random_sphere(box: SimulationBox) -> Sphere:
     center = Point(x, y, z)
     return Sphere(center, radius)
 
-def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False, plot_points=5000):
+def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False):
+    """
+    :params:
+    sphere: Sphere
+        The sphere to generate points inside
+    box: SimulationBox
+        The box to generate points inside
+    n_points: int
+        The number of points to generate
+    plot: bool
+        Whether to plot the results
+
+    :return: float
+        The estimated fraction of points inside the sphere
+    """
+    
+    points_inside = 0
+    fractions = []
+
+    for i in range(1, n_points + 1):
+        point = create_random_point(box)
+        if sphere.is_point_inside(point):
+            points_inside += 1
+        fractions.append(points_inside / i)
+
+    fraction_estimate = points_inside / n_points
+
+    if plot: 
+
+        plt.plot(range(1, n_points + 1), fractions)
+        plt.xlabel("Number of points generated")
+        plt.ylabel("Fraction inside sphere")
+        plt.title("Monte Carlo estimation of points inside sphere")
+        plt.grid(True)
+        plt.show()
+    return fraction_estimate
+
+def fraction_inside_sphere(sphere, box, n_points=100_000, plot=False, plot_points=5000):
     """
     Estimates the fraction of points inside a sphere using the Monte Carlo method.
 
