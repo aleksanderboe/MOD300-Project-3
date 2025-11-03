@@ -425,3 +425,103 @@ def estimate_dna_volume_from_atoms(atoms, n_points=100_000, units='angstrom', pa
     fraction = monte_carlo_fraction_inside_union(spheres, box, n_points=n_points, plot=plot)
     dna_volume = fraction * box.get_volume()
     return fraction, dna_volume, box.get_volume(), box, spheres
+
+
+def read_and_report(filename='dna_coords.txt', n_preview=10):
+    """
+    Task 8 helper: read DNA coordinates and print a short report.
+
+    Returns the list of atom dicts.
+    """
+    atoms = read_dna_coordinates(filename)
+    print(f"Total atoms: {len(atoms)}")
+    print("\nFirst {} atoms:".format(min(n_preview, len(atoms))))
+    for i, atom in enumerate(atoms[:n_preview]):
+        print(f"Atom {i+1}: Element={atom['element']}, X={atom['x']:.2f}, Y={atom['y']:.2f}, Z={atom['z']:.2f}, Radius={atom['radius']:.2f} Å")
+
+    print("\nAtomic radii mapping:")
+    for element, radius in ATOMIC_RADII.items():
+        print(f"{element}: {radius} Å")
+
+    return atoms
+
+
+def generate_atoms_box(atoms, units='angstrom', padding_nm=0.5, verbose=True):
+    """
+    Task 9 helper: construct a tight SimulationBox around atoms and return it.
+
+    If verbose=True, prints diagnostics about bounds and volume.
+    """
+    spheres = atoms_to_spheres(atoms, units=units)
+    box = simulation_box_from_atoms(atoms, units=units, padding_nm=padding_nm)
+    if verbose:
+        x_size = box.x_upper - box.x_lower
+        y_size = box.y_upper - box.y_lower
+        z_size = box.z_upper - box.z_lower
+        print(f"Box bounds (nm):")
+        print(f"  x: {box.x_lower:.4f} to {box.x_upper:.4f}  (size {x_size:.4f} nm)")
+        print(f"  y: {box.y_lower:.4f} to {box.y_upper:.4f}  (size {y_size:.4f} nm)")
+        print(f"  z: {box.z_lower:.4f} to {box.z_upper:.4f}  (size {z_size:.4f} nm)")
+        print(f"Box volume: {box.get_volume():.6f} nm^3")
+    return box
+
+
+def estimate_dna_volume_monte_carlo(atoms, sample_sizes=None, units='angstrom', padding_nm=0.5, plot_convergence=True, plot_3d=False):
+    """
+    Task 10 helper: run Monte Carlo estimates for a list of sample sizes and return results.
+
+    Returns a dict with keys: sample_sizes, fractions, volumes_nm3, box_volume, sum_sphere_vol
+    If plot_convergence is True, shows convergence plots. If plot_3d is True, shows a 3D sample plot.
+    """
+    if sample_sizes is None:
+        sample_sizes = [1000, 5000, 10000, 25000, 50000]
+
+    # prepare spheres and box
+    spheres = atoms_to_spheres(atoms, units=units)
+    box = simulation_box_from_atoms(atoms, units=units, padding_nm=padding_nm)
+    box_volume = box.get_volume()
+
+    fractions = []
+    volumes = []
+    for n in sample_sizes:
+        frac = monte_carlo_fraction_inside_union(spheres, box, n_points=n, plot=False)
+        v = frac * box_volume
+        fractions.append(frac)
+        volumes.append(v)
+
+    # plotting
+    if plot_convergence:
+        plt.figure(figsize=(6,4))
+        plt.plot(sample_sizes, fractions, marker='o')
+        plt.xscale('log')
+        plt.xlabel('Number of samples (log)')
+        plt.ylabel('Fraction inside union')
+        plt.title('Convergence: fraction inside union')
+        plt.grid(True)
+        plt.show()
+
+        plt.figure(figsize=(6,4))
+        plt.plot(sample_sizes, volumes, marker='o')
+        plt.xscale('log')
+        plt.xlabel('Number of samples (log)')
+        plt.ylabel('Estimated DNA volume (nm^3)')
+        plt.title('Convergence: estimated DNA volume')
+        plt.grid(True)
+        plt.show()
+
+    if plot_3d:
+        # small sample for visualization
+        monte_carlo_fraction_inside_union(spheres, box, n_points=5000, plot=True, plot_points=5000)
+
+    sum_sphere_vol = sum((4/3)*math.pi*(s.radius**3) for s in spheres)
+
+    results = {
+        'sample_sizes': sample_sizes,
+        'fractions': fractions,
+        'volumes_nm3': volumes,
+        'box_volume': box_volume,
+        'sum_sphere_vol': sum_sphere_vol,
+        'box': box,
+        'spheres': spheres,
+    }
+    return results
