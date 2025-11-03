@@ -2,6 +2,15 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Atomic radii
+ATOMIC_RADII = {
+    'H': 0.53,  # Hydrogen
+    'C': 0.67,  # Carbon
+    'N': 0.56,  # Nitrogen
+    'O': 0.48,  # Oxygen
+    'P': 0.98,  # Phosphorus
+}
+
 class SimulationBox:
     """
     A class used to represent a box
@@ -98,9 +107,10 @@ def create_random_point(box: SimulationBox) -> Point:
 
      :return: A Point randomly generated inside the simulation box. 
     """
-    x = np.random.uniform(0, box.x_upper)
-    y = np.random.uniform(0, box.y_upper)
-    z = np.random.uniform(0, box.z_upper)
+    # sample uniformly within the box bounds (respect lower and upper)
+    x = np.random.uniform(box.x_lower, box.x_upper)
+    y = np.random.uniform(box.y_lower, box.y_upper)
+    z = np.random.uniform(box.z_lower, box.z_upper)
     return Point(x,y,z)
     
 
@@ -212,3 +222,169 @@ def estimate_pi(n_points, sphere, box):
     fraction = monte_carlo_fraction_inside_sphere(sphere, box, n_points, plot=False)
     pi_estimate = (3/4) * fraction * (box.get_volume() / (sphere.radius**3))
     return pi_estimate
+
+def read_dna_coordinates(filename):
+    """
+    Reads a DNA coordinates file and returns a list of dictionaries containing
+    atom information (element, coordinates, and radius).
+
+    :params:
+    filename: str
+        Path to the DNA coordinates file
+
+    :return: list
+        List of dictionaries with keys: 'element', 'x', 'y', 'z', 'radius'
+    """
+    atoms = []
+    with open(filename, 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            if not parts:
+                continue
+
+            if len(parts) >= 5:
+                element = parts[1]
+                x, y, z = float(parts[2]), float(parts[3]), float(parts[4])
+            elif len(parts) == 4:
+                element = parts[0]
+                x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
+            else:
+                continue
+
+            element = element.strip().capitalize()
+
+            radius = ATOMIC_RADII.get(element, 0.5)  # default radius if element not found
+
+            atoms.append({
+                'element': element,
+                'x': x,
+                'y': y,
+                'z': z,
+                'radius': radius
+            })
+
+    return atoms
+
+
+def atoms_to_spheres(atoms, units='angstrom'):
+    """
+    Convert atom dicts (from read_dna_coordinates) to Sphere objects.
+
+    Parameters
+    ----------
+    atoms : list
+        List of dicts with keys 'element','x','y','z','radius' where positions and radius
+        are in the units specified by `units`.
+    units : str
+        Either 'angstrom' or 'nm'. If 'angstrom', positions and radii are converted to nm.
+
+    Returns
+    -------
+    list
+        List of Sphere objects with positions and radii in nanometres.
+    """
+    sphs = []
+    conv = 1.0
+    if units.lower().startswith('ang'):
+        conv = 0.1
+
+    for a in atoms:
+        x = a['x'] * conv
+        y = a['y'] * conv
+        z = a['z'] * conv
+        r = a['radius'] * conv
+        sphs.append(Sphere(Point(x, y, z), r))
+    return sphs
+
+
+def simulation_box_from_atoms(atoms, units='angstrom', padding_nm=0.5):
+    """
+    Create a SimulationBox that tightly contains all atoms, with optional padding (in nm).
+
+    Parameters
+    ----------
+    atoms : list
+        Atom dicts as returned by `read_dna_coordinates`.
+    units : str
+        Units of the atom coordinates ('angstrom' or 'nm').
+    padding_nm : float
+        Extra padding to add to box bounds in nanometres.
+
+    Returns
+    -------
+    SimulationBox
+        Box with lower and upper bounds set to include all atoms and their radii.
+    """
+    conv = 1.0
+    if units.lower().startswith('ang'):
+        conv = 0.1
+
+    xs = [a['x'] * conv for a in atoms]
+    ys = [a['y'] * conv for a in atoms]
+    zs = [a['z'] * conv for a in atoms]
+    rs = [a['radius'] * conv for a in atoms]
+
+    x_min = min(x - r for x, r in zip(xs, rs)) - padding_nm
+    x_max = max(x + r for x, r in zip(xs, rs)) + padding_nm
+    y_min = min(y - r for y, r in zip(ys, rs)) - padding_nm
+    y_max = max(y + r for y, r in zip(ys, rs)) + padding_nm
+    z_min = min(z - r for z, r in zip(zs, rs)) - padding_nm
+    z_max = max(z + r for z, r in zip(zs, rs)) + padding_nm
+
+    return SimulationBox(x_max, y_max, z_max, x_lower=x_min, y_lower=y_min, z_lower=z_min)
+
+
+def monte_carlo_fraction_inside_union(spheres, box, n_points=100_000, plot=False, plot_points=5000):
+    """
+    Estimate the fraction of points inside the union of multiple spheres using Monte Carlo.
+
+    Returns fraction in the box (unitless). Use box.get_volume() * fraction to get absolute volume.
+    """
+    points_inside = 0
+    for _ in range(n_points):
+        p = create_random_point(box)
+        if any(s.is_point_inside(p) for s in spheres):
+            points_inside += 1
+
+    fraction = points_inside / n_points
+
+    if plot:
+        pts = []
+        inside_mask = []
+        for _ in range(plot_points):
+            p = create_random_point(box)
+            pts.append([p.x, p.y, p.z])
+            inside_mask.append(any(s.is_point_inside(p) for s in spheres))
+
+        pts = np.array(pts)
+        inside_mask = np.array(inside_mask)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        outside = pts[~inside_mask]
+        inside = pts[inside_mask]
+        if outside.size:
+            ax.scatter(outside[:,0], outside[:,1], outside[:,2], s=2, color='blue', alpha=0.25)
+        if inside.size:
+            ax.scatter(inside[:,0], inside[:,1], inside[:,2], s=4, color='red', alpha=0.6)
+
+        ax.set_title('Points inside union of atomic spheres')
+        ax.set_xlabel('X (nm)')
+        ax.set_ylabel('Y (nm)')
+        ax.set_zlabel('Z (nm)')
+        plt.show()
+
+    return fraction
+
+
+def estimate_dna_volume_from_atoms(atoms, n_points=100_000, units='angstrom', padding_nm=0.5, plot=False):
+    """
+    High-level helper: estimate DNA volume (in nm^3) from atom list using Monte Carlo.
+
+    Returns a tuple: (fraction, dna_volume_nm3, box_volume_nm3, box, spheres)
+    """
+    spheres = atoms_to_spheres(atoms, units=units)
+    box = simulation_box_from_atoms(atoms, units=units, padding_nm=padding_nm)
+    fraction = monte_carlo_fraction_inside_union(spheres, box, n_points=n_points, plot=plot)
+    dna_volume = fraction * box.get_volume()
+    return fraction, dna_volume, box.get_volume(), box, spheres
