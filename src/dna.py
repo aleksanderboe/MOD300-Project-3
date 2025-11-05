@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+import dna 
 
 # Atomic radii
 ATOMIC_RADII = {
@@ -525,3 +526,79 @@ def estimate_dna_volume_monte_carlo(atoms, sample_sizes=None, units='angstrom', 
         'spheres': spheres,
     }
     return results
+
+
+# TOPIC 2: Random walk for accesible volume calculation
+
+class Walker: 
+    def __init__(self, n_walkers, n_steps): 
+        """
+        Initalize random walkers 
+
+        n_walkers: int 
+            Number of walkers 
+
+        n_steps: int
+            Number of steps each walker takes
+
+        """
+
+        self.n_walkers = n_walkers
+        self.n_steps = n_steps
+        self.start_points = np.random.uniform(-20, 20, size=(n_walkers, 3))
+
+    def random_walkers(self): 
+        """
+        Generate a set of random walkers in 3D. 
+        
+        """
+        paths = np.zeros((self.n_walkers, self.n_steps + 1, 3))
+        paths[:, 0, :] = self.start_points
+
+        for r in range(self.n_walkers): 
+            for s in range(1, self.n_steps + 1): 
+                step = np.random.choice([-1, 1], size=3)
+                paths[r, s] = paths[r, s - 1] + step
+
+        return paths
+
+
+    def random_walkers_fast(self): 
+        """
+        Generate fast set of random walkers in 3D. 
+        """
+        steps = 2*np.random.randint(0, 2, size=(self.n_walkers, self.n_steps, 3)) - 1
+
+        displacement = np.cumsum(steps, axis=1)
+
+        paths = self.start_points[:, None, :] + displacement
+        paths = np.concatenate([self.start_points[:, None, :], paths], axis= 1)
+
+        return paths 
+    
+
+def plot_walkers(paths, show_start_end=True): 
+    """
+    Plot 3D random walker paths 
+    """
+
+    fig = plt.figure(figsize=(8,6))
+    ax = fig.add_subplot(111, projection='3d')
+
+    n_walkers = paths.shape[0]
+
+    for i in range(n_walkers): 
+        ax.plot(paths[i, :, 0], paths [i, :, 1], paths[i, :, 2])
+
+        if show_start_end: 
+            ax.scatter(paths[i, 0, 0], paths[i, 0, 1], paths[i, 0, 2], marker='o', s=50, label=f"Start {i+1}")
+            ax.scatter(paths[i, -1, 0], paths[i, -1, 1], paths[i, -1, 2], marker='x', s=50, label=f"End {i+1}")
+
+    ax.set_title("3D Random Walk Trajectories")
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+
+    if show_start_end or n_walkers <= 10: 
+        plt.legend()
+        plt.show()
