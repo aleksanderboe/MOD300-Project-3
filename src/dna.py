@@ -599,6 +599,8 @@ def plot_walkers(paths, show_start_end=True):
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
 
-    if show_start_end or n_walkers <= 10: 
-        plt.legend()
-        plt.show()
+    if show_start_end or n_walkers <= 10:
+        _, labels = ax.get_legend_handles_labels() #handle "UserWarning" error
+        if len(labels) > 0: #handle "UserWarning" error
+            plt.legend()
+    plt.show()
