@@ -56,8 +56,11 @@ class Point:
         self.y = y
         self.z = z
 
+    def __repr__(self):
+        return self.__str__()
+
     def __str__(self):
-        return f"POINT Center: X {round(self.x, 2)} Y {round(self.y, 2)} Z {round(self.z, 2)}"
+        return f"X {round(self.x, 2)} Y {round(self.y, 2)} Z {round(self.z, 2)}"
 
 
 class Sphere:
@@ -75,8 +78,12 @@ class Sphere:
         self.center = center
         self.radius = radius
 
+
+    def __repr__(self):
+        return self.__str__()
+
     def __str__(self):
-        return f"SPHERE X: {round(self.center.x, 2)} Y: {round(self.center.y, 2)} Z: {round(self.center.z, 2)} Radius: {round(self.radius, 2)}"
+        return f"X: {round(self.center.x, 2)} Y: {round(self.center.y, 2)} Z: {round(self.center.z, 2)}\nRadius: {round(self.radius, 2)}"
 
     def is_point_inside(self, point: Point):
         """
@@ -102,11 +109,14 @@ class Sphere:
 
 def create_random_point(box: SimulationBox) -> Point:
     """
-     Creates an random point within the 3D simulation box.
+    Creates a random point within the 3D simulation box.
 
-     :params: A box
+    :params:
+    box: SimulationBox
+        Box defining the bounds for the random point.
 
-     :return: A Point randomly generated inside the simulation box. 
+    :return: Point
+        Randomly generated point inside the simulation box.
     """
     # sample uniformly within the box bounds (respect lower and upper)
     x = np.random.uniform(box.x_lower, box.x_upper)
@@ -120,7 +130,6 @@ def create_random_sphere(box: SimulationBox) -> Sphere:
     Creates a random sphere within the 3D simulation box.
 
     :params:
-    ----------
     box: SimulationBox
         The box within which to create the sphere.
 
@@ -144,6 +153,8 @@ def create_random_sphere(box: SimulationBox) -> Sphere:
 
 def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False):
     """
+    Estimate the fraction of random points that fall inside a sphere.
+
     :params:
     sphere: Sphere
         The sphere to generate points inside
@@ -181,6 +192,8 @@ def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False
 
 def fraction_inside_sphere(sphere, box, n_points=100_000, plot=False, plot_points=5000):
     """
+    Estimate the fraction of points inside a sphere or list of spheres.
+
     Estimates the fraction of points inside a sphere using the Monte Carlo method.
 
     :params:
@@ -417,7 +430,7 @@ def monte_carlo_fraction_inside_union(spheres, box, n_points=100_000, plot=False
 
 def estimate_dna_volume_from_atoms(atoms, n_points=100_000, units='angstrom', padding_nm=0.5, plot=False):
     """
-    High-level helper: estimate DNA volume (in nm^3) from atom list using Monte Carlo.
+    Estimate DNA volume (in nm^3) from atom list using Monte Carlo.
 
     Returns a tuple: (fraction, dna_volume_nm3, box_volume_nm3, box, spheres)
     """
@@ -430,7 +443,7 @@ def estimate_dna_volume_from_atoms(atoms, n_points=100_000, units='angstrom', pa
 
 def read_and_report(filename='dna_coords.txt', n_preview=10):
     """
-    Task 8 helper: read DNA coordinates and print a short report.
+    Read DNA coordinates and print a short report.
 
     Returns the list of atom dicts.
     """
@@ -449,7 +462,7 @@ def read_and_report(filename='dna_coords.txt', n_preview=10):
 
 def generate_atoms_box(atoms, units='angstrom', padding_nm=0.5, verbose=True):
     """
-    Task 9 helper: construct a tight SimulationBox around atoms and return it.
+    Construct a tight SimulationBox around atoms and return it.
 
     If verbose=True, prints diagnostics about bounds and volume.
     """
@@ -469,7 +482,7 @@ def generate_atoms_box(atoms, units='angstrom', padding_nm=0.5, verbose=True):
 
 def estimate_dna_volume_monte_carlo(atoms, sample_sizes=None, units='angstrom', padding_nm=0.5, plot_convergence=True, plot_3d=False):
     """
-    Task 10 helper: run Monte Carlo estimates for a list of sample sizes and return results.
+    Monte Carlo estimates for a list of sample sizes and return results.
 
     Returns a dict with keys: sample_sizes, fractions, volumes_nm3, box_volume, sum_sphere_vol
     If plot_convergence is True, shows convergence plots. If plot_3d is True, shows a 3D sample plot.
@@ -511,7 +524,6 @@ def estimate_dna_volume_monte_carlo(atoms, sample_sizes=None, units='angstrom', 
         plt.show()
 
     if plot_3d:
-        # small sample for visualization
         monte_carlo_fraction_inside_union(spheres, box, n_points=5000, plot=True, plot_points=5000)
 
     sum_sphere_vol = sum((4/3)*math.pi*(s.radius**3) for s in spheres)
@@ -528,7 +540,6 @@ def estimate_dna_volume_monte_carlo(atoms, sample_sizes=None, units='angstrom', 
     return results
 
 
-# TOPIC 2: Random walk for accesible volume calculation
 
 class Walker: 
     def __init__(self, n_walkers, n_steps): 
@@ -600,7 +611,241 @@ def plot_walkers(paths, show_start_end=True):
     ax.set_zlabel("Z")
 
     if show_start_end or n_walkers <= 10:
-        _, labels = ax.get_legend_handles_labels() #handle "UserWarning" error
-        if len(labels) > 0: #handle "UserWarning" error
+        _, labels = ax.get_legend_handles_labels()
+        if len(labels) > 0: 
             plt.legend()
     plt.show()
+
+
+def _reflect_to_box(position, box):
+    """
+    Reflect a 3D point back into the box if it crosses any boundary.
+
+    Parameters
+    ----------
+    position : np.ndarray
+        Point coordinates as a numpy array [x, y, z].
+    box : SimulationBox
+        Simulation box with lower/upper bounds.
+
+    Returns
+    -------
+    np.ndarray
+        Reflected point inside box bounds.
+    """
+    x, y, z = position
+    if x < box.x_lower:
+        x = box.x_lower + (box.x_lower - x)
+    if x > box.x_upper:
+        x = box.x_upper - (x - box.x_upper)
+    if y < box.y_lower:
+        y = box.y_lower + (box.y_lower - y)
+    if y > box.y_upper:
+        y = box.y_upper - (y - box.y_upper)
+    if z < box.z_lower:
+        z = box.z_lower + (box.z_lower - z)
+    if z > box.z_upper:
+        z = box.z_upper - (z - box.z_upper)
+    return np.array([x, y, z])
+
+
+def estimate_accessible_volume_walkers(
+    atoms,
+    probe_radius_nm=0.14,
+    n_walkers=200,
+    n_steps=2000,
+    step_size_nm=0.02,
+    units='angstrom',
+    padding_nm=0.5,
+):
+    """
+    Estimate accessible volume using random walkers with probe-radius collisions.
+
+    A position is accessible if it lies outside all atomic spheres inflated by the
+    probe radius. Walkers move with small isotropic steps; steps that would enter
+    an inflated sphere are rejected, and boundary crossings are reflected.
+
+    Parameters
+    ----------
+    atoms : list
+        Atom dicts as returned by `read_dna_coordinates` / `read_and_report`.
+    probe_radius_nm : float
+        Probe radius in nanometres used to inflate atom spheres.
+    n_walkers : int
+        Number of independent walkers.
+    n_steps : int
+        Number of steps per walker.
+    step_size_nm : float
+        Step size in nanometres for each walker move.
+    units : str
+        Units of the atom coordinates ('angstrom' or 'nm').
+    padding_nm : float
+        Padding added to the generated simulation box around atoms.
+
+    Returns
+    -------
+    tuple
+        (accessible_fraction, accessible_volume_nm3, box)
+    """
+    # Prepare box and inflated spheres
+    box = simulation_box_from_atoms(atoms, units=units, padding_nm=padding_nm)
+    atom_spheres = atoms_to_spheres(atoms, units=units)
+    inflated_spheres = [Sphere(s.center, s.radius + probe_radius_nm) for s in atom_spheres]
+
+
+    def random_point_in_box(b):
+        return np.array([
+            np.random.uniform(b.x_lower, b.x_upper),
+            np.random.uniform(b.y_lower, b.y_upper),
+            np.random.uniform(b.z_lower, b.z_upper),
+        ])
+
+    def is_accessible(position):
+        p = Point(position[0], position[1], position[2])
+        return not any(s.is_point_inside(p) for s in inflated_spheres)
+
+    # Initialize starting positions in accessible space
+    starts = []
+    for _ in range(n_walkers):
+        for _retry in range(10000):
+            candidate = random_point_in_box(box)
+            if is_accessible(candidate):
+                starts.append(candidate)
+                break
+    if not starts:
+        return 0.0, 0.0, box
+    starts = np.array(starts)
+
+    accessible_count = 0
+    visited_count = 0
+
+    # Run walkers
+    for i in range(len(starts)):
+        pos = starts[i].copy()
+        for _ in range(n_steps):
+            direction = np.random.uniform(size=3)
+            norm = np.linalg.norm(direction)
+            if norm == 0:
+                continue
+            direction /= norm
+            proposal = pos + step_size_nm * direction
+            proposal = _reflect_to_box(proposal, box)
+            if is_accessible(proposal):
+                pos = proposal
+                accessible_count += 1
+            visited_count += 1
+
+    accessible_fraction = accessible_count / visited_count if visited_count else 0.0
+    accessible_volume_nm3 = accessible_fraction * box.get_volume()
+    return accessible_fraction, accessible_volume_nm3, box
+
+
+def validate_accessible_volume_bounds_and_convergence(
+    atoms,
+    probe_radius_small_nm=0.05,
+    probe_radius_large_nm=0.40,
+    probe_radius_nm=0.14,
+    n_walkers_lo=100,
+    n_steps_lo=1000,
+    n_walkers_hi=300,
+    n_steps_hi=3000,
+    step_size_nm=0.02,
+    units='angstrom',
+    padding_nm=0.5,
+):
+    """
+    Run simple validation checks: bounds, monotonicity (w.r.t. probe radius), and convergence.
+
+    Parameters
+    ----------
+    atoms : list
+        Atom dicts as returned by `read_dna_coordinates`.
+    probe_radius_small_nm : float
+        Smaller probe radius (nm) for monotonicity check.
+    probe_radius_large_nm : float
+        Larger probe radius (nm) for monotonicity check.
+    probe_radius_nm : float
+        Probe radius (nm) for convergence check.
+    n_walkers_lo : int
+        Fewer walkers for convergence check.
+    n_steps_lo : int
+        Fewer steps for convergence check.
+    n_walkers_hi : int
+        More walkers for convergence check.
+    n_steps_hi : int
+        More steps for convergence check.
+    step_size_nm : float
+        Step size (nm) for walkers.
+    units : str
+        Units for atoms ('angstrom' or 'nm').
+    padding_nm : float
+        Box padding (nm).
+
+    Returns
+    -------
+    dict
+        {
+          'box_volume': float,
+          'v_small': float,
+          'v_large': float,
+          'bounds_ok_small': bool,
+          'monotonic_ok': bool,
+          'v_lo': float,
+          'v_hi': float,
+          'rel_change': float
+        }
+    """
+    f_small, v_small, box = estimate_accessible_volume_walkers(
+        atoms,
+        probe_radius_nm=probe_radius_small_nm,
+        n_walkers=n_walkers_lo,
+        n_steps=n_steps_lo,
+        step_size_nm=step_size_nm,
+        units=units,
+        padding_nm=padding_nm,
+    )
+
+    f_large, v_large, _ = estimate_accessible_volume_walkers(
+        atoms,
+        probe_radius_nm=probe_radius_large_nm,
+        n_walkers=n_walkers_lo,
+        n_steps=n_steps_lo,
+        step_size_nm=step_size_nm,
+        units=units,
+        padding_nm=padding_nm,
+    )
+
+    bounds_ok_small = (0.0 <= v_small <= box.get_volume())
+    monotonic_ok = (v_small >= v_large)
+
+    f_lo, v_lo, _ = estimate_accessible_volume_walkers(
+        atoms,
+        probe_radius_nm=probe_radius_nm,
+        n_walkers=n_walkers_lo,
+        n_steps=n_steps_lo,
+        step_size_nm=step_size_nm,
+        units=units,
+        padding_nm=padding_nm,
+    )
+    f_hi, v_hi, _ = estimate_accessible_volume_walkers(
+        atoms,
+        probe_radius_nm=probe_radius_nm,
+        n_walkers=n_walkers_hi,
+        n_steps=n_steps_hi,
+        step_size_nm=step_size_nm,
+        units=units,
+        padding_nm=padding_nm,
+    )
+
+    rel_change = abs(v_hi - v_lo) / max(v_hi, v_lo) if max(v_hi, v_lo) > 0 else 0.0
+
+    return {
+        'box_volume': box.get_volume(),
+        'v_small': v_small,
+        'v_large': v_large,
+        'bounds_ok_small': bounds_ok_small,
+        'monotonic_ok': monotonic_ok,
+        'v_lo': v_lo,
+        'v_hi': v_hi,
+        'rel_change': rel_change,
+    }
