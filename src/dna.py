@@ -192,9 +192,7 @@ def monte_carlo_fraction_inside_sphere(sphere, box, n_points=100_000, plot=False
 
 def fraction_inside_sphere(sphere, box, n_points=100_000, plot=False, plot_points=5000):
     """
-    Estimate the fraction of points inside a sphere or list of spheres.
-
-    Estimates the fraction of points inside a sphere using the Monte Carlo method.
+    Estimate the fraction of random points that fall inside one or more spheres.
 
     :params:
     sphere: Sphere
