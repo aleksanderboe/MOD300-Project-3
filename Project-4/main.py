@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from astropy import units as u
 from mw_plot import MWSkyMap
+from sklearn.cluster import KMeans
 
 def plt2rgbarr(fig):
     """
@@ -35,3 +36,72 @@ def create_sky_map(center, radius, background):
     plt.title(f"{center} - Radius: {radius[0]} arcsec")
     plt.show()
     return fig, ax
+
+def encode_pixels(img_array): 
+    """
+    Take the RGB image from plt2rgbarr) and turn it into a 2D array of features for clustering. 
+
+    Encoding: Each pixel is represented by its normalized RGB values. 
+    Values are in [0, 1]
+    -Blue regions: B is largest
+    -Red regions: R is largest
+
+    """
+
+    h, w, _ = img_array.shape
+
+    features = img_array.reshape(-1, 3).astype(np.float32) / 255.0
+    return features, (h, w)
+
+def kmeans_cluster_pixels(img_array, n_clusters=4, random_state=0): 
+    """
+
+
+    """
+    features, (h, w) = encode_pixels(img_array)
+
+    kmeans = KMeans(
+        n_clusters=n_clusters, 
+        random_state=random_state, 
+        n_init="auto", 
+    )
+
+    labels = kmeans.fit_predict(features)
+    label_image = labels.reshape(h, w)
+    return label_image, kmeans
+
+def plot_cluster_labels(label_image, title="K-means pixel clusters"): 
+    """
+
+    """
+
+    plt.figure(figsize=(5,5))
+    plt.imshow(label_image, cmap="tab10")
+    plt.axis("off")
+    plt.title(title)
+    plt.show()
+
+def describe_clusters(kmeans): 
+    """
+
+    """
+    descriptions = []
+    centers = kmeans.cluster_centers_
+
+    for i, (r, g, b) in enumerate(centers): 
+        brightness = (r + g + b) / 3.0
+
+        if brightness < 0.2: 
+            desc = "dark background space"
+        elif brightness > 0.75: 
+            desc = "bright core / stars / white-yellow region"
+        elif b == max(r, g, b): 
+            desc = "blue-ish region (spiral arms / hot stars)"
+        elif r == max(r, g, b): 
+            desc = "red-ish region (labels / nebulae )"
+        else: 
+            desc = "neutral / grey-ish region"
+        descriptions.append(
+            f"Cluster {i}: {desc} - center RGB (normalized) = [{r: .2f}, {g: .2f}, {b:.2f}]"
+        )
+    return descriptions
