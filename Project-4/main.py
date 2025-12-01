@@ -105,3 +105,31 @@ def describe_clusters(kmeans):
             f"Cluster {i}: {desc} - center RGB (normalized) = [{r: .2f}, {g: .2f}, {b:.2f}]"
         )
     return descriptions
+
+
+def overlay_cluster_contours(img_array, label_image, title="Original image with overlaid K-means cluster contours"):
+    """
+    Overlay K-means cluster boundaries as colored contours on top of the original RGB image.
+
+    Parameters
+    ----------
+    img_array : np.ndarray
+        RGB image array of shape (H, W, 3)
+    label_image : np.ndarray
+        2D array of shape (H, W) with integer cluster labels from kmeans_cluster_pixels.
+    title : str, optional
+        Title for the plot.
+    """
+    plt.figure(figsize=(6, 6))
+    plt.imshow(img_array)
+    plt.axis("off")
+
+    n_clusters = int(label_image.max()) + 1
+    colors = ["yellow", "cyan", "magenta", "white", "red", "green", "blue"]
+
+    for k in range(n_clusters):
+        mask = (label_image == k).astype(float)
+        plt.contour(mask, levels=[0.5], colors=colors[k % len(colors)], linewidths=0.8)
+
+    plt.title(title)
+    plt.show()
