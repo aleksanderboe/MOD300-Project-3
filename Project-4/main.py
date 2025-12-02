@@ -107,13 +107,13 @@ def describe_clusters(kmeans):
         if brightness < 0.2: 
             desc = "dark background space"
         elif brightness > 0.75: 
-            desc = "bright core / stars / white-yellow region"
+            desc = "bright core - stars - white-yellow region"
         elif b == max(r, g, b): 
-            desc = "blue-ish region (spiral arms / hot stars)"
+            desc = "blue-ish region (spiral arms - hot stars)"
         elif r == max(r, g, b): 
-            desc = "red-ish region (labels / nebulae )"
+            desc = "red-ish region (labels - nebulae )"
         else: 
-            desc = "neutral / grey-ish region"
+            desc = "neutral - grey-ish region"
         descriptions.append(
             f"Cluster {i}: {desc} - center RGB (normalized) = [{r: .2f}, {g: .2f}, {b:.2f}]"
         )
@@ -146,3 +146,25 @@ def overlay_cluster_contours(img_array, label_image, title="Original image with 
 
     plt.title(title)
     plt.show()
+
+def run_task7_experiments(img_array, k_values=(3, 5)): 
+    """
+    Try different numbers of clusters, repeat clustering and overlay for each k, and then print cluster descriptions. 
+
+    Parameters: 
+    ----------
+    img_array: np.adarray
+        RGB image array from plt2rgbarr
+    k_values: int 
+        Different number of clusters to test. 
+    """
+    for k in k_values: 
+        label_image, kmeans = kmeans_cluster_pixels(img_array, n_clusters=k)
+        
+        plot_cluster_labels(label_image, title=f"K-means Clusters (k={k})")
+
+        for desc in describe_clusters(kmeans): 
+            print(desc)
+        
+        overlay_cluster_contours(img_array, label_image, title=f"Original image with overlaid K-means contours (k={k})")
+
