@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 from astropy import units as u
 from mw_plot import MWSkyMap
 from sklearn.cluster import KMeans
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+import pandas as pd
+from pathlib import Path
 
 def plt2rgbarr(fig):
     """
@@ -133,3 +137,297 @@ def overlay_cluster_contours(img_array, label_image, title="Original image with 
 
     plt.title(title)
     plt.show()
+
+def reconstruct_from_clusters(img_array, label_image, kmeans):
+    """
+    ----------
+    img_array : np.ndarray
+        Original RGB image array of shape (H, W, 3)
+    label_image : np.ndarray
+        2D array of shape (H, W) with integer cluster labels from kmeans_cluster_pixels
+    kmeans : sklearn.cluster.KMeans
+        Fitted KMeans model with cluster centers
+        
+    Returns
+    -------
+    reconstructed : np.ndarray
+        Reconstructed image array of shape (H, W, 3) with uint8 dtype
+    """
+    h, w = label_image.shape
+    # Get cluster centers (normalized 0-1)
+    centers = kmeans.cluster_centers_
+    
+    reconstructed = centers[label_image.flatten()].reshape(h, w, 3)
+    
+    reconstructed = (reconstructed * 255).astype(np.uint8)
+    
+    return reconstructed
+
+def compare_cluster_numbers(img_array, n_clusters_list=[2, 3, 4, 5, 6, 8]):
+    """
+    Compare K-means clustering results for different numbers of clusters.
+    Performs tasks 5 and 6 for each cluster number and returns results.
+    
+    Parameters
+    ----------
+    img_array : np.ndarray
+        RGB image array of shape (H, W, 3)
+    n_clusters_list : list of int
+        List of different k values to try
+        
+    Returns
+    -------
+    results : dict
+        Dictionary mapping n_clusters to (label_image, kmeans) tuples
+    """
+    results = {}
+    for n_clusters in n_clusters_list:
+        label_image, kmeans = kmeans_cluster_pixels(img_array, n_clusters=n_clusters, random_state=0)
+        results[n_clusters] = (label_image, kmeans)
+    return results
+
+def plot_cluster_comparison(img_array, results):
+    """
+    Create a comprehensive comparison plot showing cluster labels and overlays
+    for different numbers of clusters.
+    
+    Parameters
+    ----------
+    img_array : np.ndarray
+        Original RGB image array
+    results : dict
+        Dictionary from compare_cluster_numbers mapping n_clusters to (label_image, kmeans)
+    """
+    n_experiments = len(results)
+    fig, axes = plt.subplots(n_experiments, 2, figsize=(12, 4 * n_experiments))
+    
+    if n_experiments == 1:
+        axes = axes.reshape(1, -1)
+    
+    for idx, (n_clusters, (label_image, kmeans)) in enumerate(sorted(results.items())):
+        axes[idx, 0].imshow(label_image, cmap="tab10")
+        axes[idx, 0].axis("off")
+        axes[idx, 0].set_title(f"Cluster Labels (k={n_clusters})")
+        
+        axes[idx, 1].imshow(img_array)
+        axes[idx, 1].axis("off")
+        
+        n_clusters_actual = int(label_image.max()) + 1
+        colors = ["yellow", "cyan", "magenta", "white", "red", "green", "blue", "orange", "purple", "pink"]
+        
+        for k in range(n_clusters_actual):
+            mask = (label_image == k).astype(float)
+            axes[idx, 1].contour(mask, levels=[0.5], colors=colors[k % len(colors)], linewidths=0.8)
+        
+        axes[idx, 1].set_title(f"Overlay Contours (k={n_clusters})")
+    
+    plt.tight_layout()
+    plt.show()
+
+def analyze_cluster_results(results):
+    """
+    Analyze and print detailed descriptions of clusters for each experiment.
+    
+    Parameters
+    ----------
+    results : dict
+        Dictionary from compare_cluster_numbers mapping n_clusters to (label_image, kmeans)
+    """
+    for n_clusters in sorted(results.keys()):
+        _, kmeans = results[n_clusters]
+        print(f"\n{'='*60}")
+        print(f"Analysis for k={n_clusters} clusters:")
+        print(f"{'='*60}")
+        for desc in describe_clusters(kmeans):
+            print(desc)
+
+def load_ebola_data(file_path):
+    """
+    Load Ebola case data from a .dat file.
+    
+    Parameters
+    ----------
+    file_path : str or Path
+        Path to the .dat file containing Ebola data
+        
+    Returns
+    -------
+    days : np.ndarray
+        Days since first outbreak
+    new_cases : np.ndarray
+        New cases reported at each time point
+    cumulative_cases : np.ndarray
+        Cumulative cases over time
+    """
+    df = pd.read_csv(file_path, sep="\t")
+    df["Days"] = pd.to_numeric(df["Days"], errors="coerce")
+    df["NumOutbreaks"] = pd.to_numeric(df["NumOutbreaks"], errors="coerce")
+    df = df.dropna(subset=["Days", "NumOutbreaks"]).sort_values("Days")
+    
+    days = df["Days"].values
+    new_cases = df["NumOutbreaks"].values
+    cumulative_cases = df["NumOutbreaks"].cumsum().values
+    
+    return days, new_cases, cumulative_cases
+
+def train_linear_regression(days, cumulative_cases):
+    """
+    Train a linear regression model on cumulative cases vs days.
+    
+    Parameters
+    ----------
+    days : np.ndarray
+        Days since first outbreak (feature)
+    cumulative_cases : np.ndarray
+        Cumulative cases (target)
+        
+    Returns
+    -------
+    model : sklearn.linear_model.LinearRegression
+        Fitted linear regression model
+    slope : float
+        Slope of the fitted line (cases per day)
+    intercept : float
+        Intercept of the fitted line
+    """
+    # Reshape for sklearn (needs 2D array)
+    X = days.reshape(-1, 1)
+    y = cumulative_cases
+    
+    # Train linear regression model
+    model = LinearRegression()
+    model.fit(X, y)
+    
+    slope = model.coef_[0]
+    intercept = model.intercept_
+    
+    return model, slope, intercept
+
+def plot_linear_regression(days, cumulative_cases, model, country_name, ax=None):
+    """
+    Plot data points and linear regression line.
+    
+    Parameters
+    ----------
+    days : np.ndarray
+        Days since first outbreak
+    cumulative_cases : np.ndarray
+        Cumulative cases (data points)
+    model : sklearn.linear_model.LinearRegression
+        Fitted linear regression model
+    country_name : str
+        Name of the country
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot on. If None, creates new figure.
+        
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        Axes with the plot
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Plot data points
+    ax.scatter(days, cumulative_cases, color='black', marker='o', s=50, 
+               label='Data points', zorder=3)
+    
+    # Generate predictions for smooth line
+    days_pred = np.linspace(days.min(), days.max(), 100)
+    cumulative_pred = model.predict(days_pred.reshape(-1, 1))
+    
+    # Plot regression line
+    ax.plot(days_pred, cumulative_pred, 'r-', linewidth=2, 
+            label='Linear regression', zorder=2)
+    
+    ax.set_xlabel('Days since first outbreak', fontsize=12)
+    ax.set_ylabel('Cumulative Cases', fontsize=12)
+    ax.set_title(f'Ebola Epidemic in {country_name}: Linear Regression', 
+                 fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11, loc='best')
+    ax.grid(True, alpha=0.3)
+    
+    return ax
+
+def plot_ebola_data(days, new_cases, cumulative_cases, country_name):
+    """
+    Plot Ebola data in the style of Project 2 Exercise 5 Task 1.
+    Shows new cases as red circles and cumulative cases as black line with squares.
+    
+    Parameters
+    ----------
+    days : np.ndarray
+        Days since first outbreak
+    new_cases : np.ndarray
+        New cases at each time point
+    cumulative_cases : np.ndarray
+        Cumulative cases over time
+    country_name : str
+        Name of the country
+    """
+    fig, ax_left = plt.subplots()
+    ax_right = ax_left.twinx()
+    
+    # Left y-axis: New cases (red circles)
+    ax_left.scatter(
+        days, new_cases,
+        marker="o",
+        facecolors="none",
+        edgecolors="red",
+        label="New cases"
+    )
+    ax_left.set_ylabel("Number of outbreaks", color="red")
+    ax_left.tick_params(axis='y', labelcolor='red')
+    
+    # Right y-axis: Cumulative cases (black line with squares)
+    ax_right.plot(
+        days, cumulative_cases,
+        linestyle="-",
+        color="black",
+        marker="s",
+        markerfacecolor="none",
+        markeredgecolor="black",
+        linewidth=2,
+        markersize=5,
+        label="Cumulative cases"
+    )
+    ax_right.set_ylabel("Cumulative number of outbreaks", color="black")
+    ax_right.tick_params(axis='y', labelcolor='black')
+    
+    ax_left.set_xlabel("Days since last outbreak")
+    ax_left.set_title(f"Ebola outbreaks in {country_name}")
+    ax_left.grid(True, which="both", linestyle=":", alpha=0.6)
+    
+    plt.show()
+
+def load_all_countries_data(data_dir="MOD300-Project-2/data"):
+    """
+    Load Ebola data for all three countries.
+    
+    Parameters
+    ----------
+    data_dir : str or Path
+        Directory containing the data files
+        
+    Returns
+    -------
+    countries_data : dict
+        Dictionary with country names as keys and tuples (days, new_cases, cumulative_cases) as values
+    """
+    data_path = Path(data_dir)
+    
+    countries_data = {}
+    files = {
+        "Guinea": data_path / "ebola_cases_guinea.dat",
+        "Liberia": data_path / "ebola_cases_liberia.dat",
+        "Sierra Leone": data_path / "ebola_cases_sierra_leone.dat",
+    }
+    
+    for country, file_path in files.items():
+        if file_path.exists():
+            days, new_cases, cumulative_cases = load_ebola_data(file_path)
+            countries_data[country] = (days, new_cases, cumulative_cases)
+        else:
+            print(f"Warning: File not found: {file_path}")
+    
+    return countries_data
