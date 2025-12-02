@@ -49,9 +49,7 @@ def encode_pixels(img_array):
     Values are in [0, 1]
     -Blue regions: B is largest
     -Red regions: R is largest
-
     """
-
     h, w, _ = img_array.shape
 
     features = img_array.reshape(-1, 3).astype(np.float32) / 255.0
@@ -59,8 +57,21 @@ def encode_pixels(img_array):
 
 def kmeans_cluster_pixels(img_array, n_clusters=4, random_state=0): 
     """
+    Parameters
+    ----------
+    img_array: np.adarray (H, W, 3)
+        RGB image from plt2rgbarr.
+    n_clusters: int
+        Number of color clusters
+    random_state: int
+        For reproducibility
 
-
+    Returns
+    -------
+    label_image: np.adarray (H, W)
+        Cluster index for each pixel
+    kmeans : sklearn.cluster.KMeans
+        Trained KMeans model
     """
     features, (h, w) = encode_pixels(img_array)
 
@@ -76,7 +87,7 @@ def kmeans_cluster_pixels(img_array, n_clusters=4, random_state=0):
 
 def plot_cluster_labels(label_image, title="K-means pixel clusters"): 
     """
-
+    Visualize the clusters
     """
 
     plt.figure(figsize=(5,5))
@@ -87,7 +98,9 @@ def plot_cluster_labels(label_image, title="K-means pixel clusters"):
 
 def describe_clusters(kmeans): 
     """
+    Give a description of each cluster based on its RGB center. 
 
+    Returns a list of strings. 
     """
     descriptions = []
     centers = kmeans.cluster_centers_
@@ -98,13 +111,13 @@ def describe_clusters(kmeans):
         if brightness < 0.2: 
             desc = "dark background space"
         elif brightness > 0.75: 
-            desc = "bright core / stars / white-yellow region"
+            desc = "bright core - stars - white-yellow region"
         elif b == max(r, g, b): 
-            desc = "blue-ish region (spiral arms / hot stars)"
+            desc = "blue-ish region (spiral arms - hot stars)"
         elif r == max(r, g, b): 
-            desc = "red-ish region (labels / nebulae )"
+            desc = "red-ish region (labels - nebulae )"
         else: 
-            desc = "neutral / grey-ish region"
+            desc = "neutral - grey-ish region"
         descriptions.append(
             f"Cluster {i}: {desc} - center RGB (normalized) = [{r: .2f}, {g: .2f}, {b:.2f}]"
         )
@@ -431,3 +444,24 @@ def load_all_countries_data(data_dir="MOD300-Project-2/data"):
             print(f"Warning: File not found: {file_path}")
     
     return countries_data
+def run_task7_experiments(img_array, k_values=(3, 5)): 
+    """
+    Try different numbers of clusters, repeat clustering and overlay for each k, and then print cluster descriptions. 
+
+    Parameters: 
+    ----------
+    img_array: np.adarray
+        RGB image array from plt2rgbarr
+    k_values: int 
+        Different number of clusters to test. 
+    """
+    for k in k_values: 
+        label_image, kmeans = kmeans_cluster_pixels(img_array, n_clusters=k)
+        
+        plot_cluster_labels(label_image, title=f"K-means Clusters (k={k})")
+
+        for desc in describe_clusters(kmeans): 
+            print(desc)
+        
+        overlay_cluster_contours(img_array, label_image, title=f"Original image with overlaid K-means contours (k={k})")
+
