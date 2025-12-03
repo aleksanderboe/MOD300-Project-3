@@ -10,6 +10,10 @@ from sklearn.linear_model import LinearRegression
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error
+from tensorflow import keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+
 
 from ebola_utils import (
     load_ebola_data,
@@ -115,7 +119,15 @@ def describe_clusters(kmeans):
     """
     Give a description of each cluster based on its RGB center. 
 
-    Returns a list of strings. 
+    Parameters
+    ----------
+    kmeans: sklearn.cluster.KMeans
+        Trained KMeans model
+
+    Returns
+    -------
+    descriptions: list
+        List of strings describing each cluster
     """
     descriptions = []
     centers = kmeans.cluster_centers_
@@ -433,6 +445,23 @@ def train_neural_network(days, cumulative_cases, hidden_layer_sizes=(32,32), tes
 def plot_neural_network_prediction(days, cumulative_cases, model, x_scaler, y_scaler, country_name, ax=None): 
     """
     Plot data points and NN prediction curve over the whole time range. 
+
+    Parameters
+    ----------
+    days: np.ndarray
+        Days since first outbreak
+    cumulative_cases: np.adarray
+        Cumulative cases
+    model: sklearn.neural_network.MLPRegressor
+        Trained neural network model
+    x_scaler: sklearn.preprocessing.StandardScaler
+        Scaler used for normalizing the input data
+    y_scaler: sklearn.preprocessing.StandardScaler
+        Scaler used for normalizing the output data
+    country_name: str
+        Name of the country
+    ax: matplotlib.axes.Axes, optional
+        Axes to plot on. If None, creates new figure.
     """
     if ax is None: 
         fig, ax = plt.subplots(figsize=(10, 6)) 
@@ -457,8 +486,14 @@ def plot_neural_network_prediction(days, cumulative_cases, model, x_scaler, y_sc
 
 def run_task3_neural_networks(test_size=0.2, hidden_layer_sizes=(32, 32)): 
     """
-    Function to run task 3. 
     Train a neural network for each country and plot predictions. 
+
+    Parameters
+    ----------
+    test_size: float
+        Fraction of data to keep for testing 
+    hidden_layer_sizes: tuple
+        Sizes of hidden layers in the MLP
     """
 
     countries_data = load_all_countries_data()
@@ -480,3 +515,238 @@ def run_task3_neural_networks(test_size=0.2, hidden_layer_sizes=(32, 32)):
         plot_neural_network_prediction(days, cumulative_cases, model, x_scaler, y_scaler, country_name=country, ax=ax)
 
         plt.show()
+
+def create_sequences(data, n_steps=3):
+    """
+    Create sequences for LSTM training.
+    
+    Parameters
+    ----------
+    data : np.ndarray
+        1D array of time series values
+    n_steps : int
+        Number of time steps to use as input (lookback window)
+        
+    Returns
+    -------
+    X : np.ndarray
+        Input sequences of shape (n_samples, n_steps, 1)
+    y : np.ndarray
+        Target values of shape (n_samples,)
+    """
+    X, y = [], []
+    for i in range(len(data)):
+        end_ix = i + n_steps
+        if end_ix > len(data) - 1:
+            break
+        seq_x, seq_y = data[i:end_ix], data[end_ix]
+        X.append(seq_x)
+        y.append(seq_y)
+    return np.array(X), np.array(y)
+
+def train_lstm_model(days, cumulative_cases, n_steps=3, test_size=0.2, epochs=100, batch_size=1, verbose=0):
+    """
+    Train an LSTM model for time series prediction.
+    
+    Parameters
+    ----------
+    days : np.ndarray
+        Days since first outbreak
+    cumulative_cases : np.ndarray
+        Cumulative cases over time
+    n_steps : int
+        Number of time steps to look back (sequence length)
+    test_size : float
+        Fraction of data to use for testing (taken from the end, as is proper for time series)
+    epochs : int
+        Number of training epochs
+    batch_size : int
+        Batch size for training
+    verbose : int
+        Verbosity level (0=silent, 1=progress bar)
+        
+    Returns
+    -------
+    model : keras.Model
+        Trained LSTM model
+    scaler : sklearn.preprocessing.StandardScaler
+        Scaler fitted on training data
+    X_train, X_test, y_train, y_test : np.ndarray
+        Train/test sequences
+    metrics : dict
+        R² and RMSE for train and test sets
+    """
+
+    
+    data = cumulative_cases.astype(np.float32)
+    
+    scaler = StandardScaler()
+    data_scaled = scaler.fit_transform(data.reshape(-1, 1)).ravel()
+    
+    X, y = create_sequences(data_scaled, n_steps=n_steps)
+    
+    split_idx = int(len(X) * (1 - test_size))
+    X_train, X_test = X[:split_idx], X[split_idx:]
+    y_train, y_test = y[:split_idx], y[split_idx:]
+    
+    X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
+    X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+    
+    # Build LSTM model
+    model = Sequential()
+    model.add(LSTM(50, activation='relu', input_shape=(n_steps, 1)))
+    model.add(Dense(1))
+    model.compile(optimizer='adam', loss='mse')
+    
+    # Train model
+    model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size, verbose=verbose, shuffle=False)
+    
+    # Make predictions
+    y_train_pred_scaled = model.predict(X_train, verbose=0)
+    y_test_pred_scaled = model.predict(X_test, verbose=0)
+    
+    y_train_pred = scaler.inverse_transform(y_train_pred_scaled).ravel()
+    y_test_pred = scaler.inverse_transform(y_test_pred_scaled).ravel()
+    y_train_actual = scaler.inverse_transform(y_train.reshape(-1, 1)).ravel()
+    y_test_actual = scaler.inverse_transform(y_test.reshape(-1, 1)).ravel()
+    
+    metrics = {
+        "train_r2": r2_score(y_train_actual, y_train_pred),
+        "test_r2": r2_score(y_test_actual, y_test_pred),
+        "train_rmse": np.sqrt(mean_squared_error(y_train_actual, y_train_pred)),
+        "test_rmse": np.sqrt(mean_squared_error(y_test_actual, y_test_pred)),
+    }
+    
+    return model, scaler, X_train, X_test, y_train, y_test, metrics
+
+def predict_future_lstm(model, scaler, last_sequence, n_future):
+    """
+    Predict future values using LSTM model.
+    
+    Parameters
+    ----------
+    model : keras.Model
+        Trained LSTM model
+    scaler : sklearn.preprocessing.StandardScaler
+        Scaler used for normalization
+    last_sequence : np.ndarray
+        Last n_steps values (scaled) to use as starting point
+    n_future : int
+        Number of future time steps to predict
+        
+    Returns
+    -------
+    predictions : np.ndarray
+        Predicted future values (in original scale)
+    """
+    predictions = []
+    current_seq = last_sequence.copy()
+    
+    for _ in range(n_future):
+        X_input = current_seq.reshape((1, len(current_seq), 1))
+        pred_scaled = model.predict(X_input, verbose=0)
+        predictions.append(pred_scaled[0, 0])
+        current_seq = np.append(current_seq[1:], pred_scaled[0, 0])
+    
+    predictions = scaler.inverse_transform(np.array(predictions).reshape(-1, 1)).ravel()
+    return predictions
+
+def plot_lstm_prediction(days, cumulative_cases, model, scaler, n_steps=3, country_name="", ax=None):
+    """
+    Plot LSTM predictions over the data range and into the future.
+    
+    Parameters
+    ----------
+    days : np.ndarray
+        Days since first outbreak
+    cumulative_cases : np.ndarray
+        Cumulative cases (actual data)
+    model : keras.Model
+        Trained LSTM model
+    scaler : sklearn.preprocessing.StandardScaler
+        Scaler used for normalization
+    n_steps : int
+        Number of time steps used in sequences
+    country_name : str
+        Name of the country
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot on
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(12, 6))
+    
+    ax.scatter(days, cumulative_cases, color='black', marker='o', s=50, 
+               label='Actual data', zorder=3, alpha=0.7)
+    
+    data_scaled = scaler.transform(cumulative_cases.reshape(-1, 1)).ravel()
+    X, y = create_sequences(data_scaled, n_steps=n_steps)
+    
+    X_all = X.reshape((X.shape[0], X.shape[1], 1))
+    y_pred_scaled = model.predict(X_all, verbose=0)
+    y_pred = scaler.inverse_transform(y_pred_scaled).ravel()
+    
+    days_pred = days[n_steps:n_steps+len(y_pred)]
+    
+    ax.plot(days_pred, y_pred, 'b-', linewidth=2, 
+            label='LSTM prediction (fitted)', zorder=2, alpha=0.8)
+    
+    n_future = 30  # Predict 30 days into the future
+    last_seq = data_scaled[-n_steps:]
+    future_pred = predict_future_lstm(model, scaler, last_seq, n_future)
+    future_days = np.arange(days[-1] + 1, days[-1] + 1 + n_future)
+    
+    ax.plot(future_days, future_pred, 'r--', linewidth=2, 
+            label=f'LSTM prediction (future, {n_future} days)', zorder=2, alpha=0.8)
+    
+    ax.set_xlabel('Days since first outbreak', fontsize=12)
+    ax.set_ylabel('Cumulative cases', fontsize=12)
+    ax.set_title(f'Ebola epidemic in {country_name}: LSTM Model Prediction', 
+                 fontsize=14, fontweight='bold')
+    ax.legend(fontsize=11, loc='best')
+    ax.grid(True, alpha=0.3)
+    
+    return ax
+
+def run_task4_lstm(n_steps=3, test_size=0.2, epochs=100):
+    """
+    Train LSTM models for all countries and visualize predictions.
+    
+    Parameters
+    ----------
+    n_steps : int
+        Number of time steps for LSTM lookback window
+    test_size : float
+        Fraction of data for testing
+    epochs : int
+        Number of training epochs
+    """
+    countries_data = load_all_countries_data()
+    
+    for country, (days, new_cases, cumulative_cases) in countries_data.items():
+        print(f"\n{'='*60}")
+        print(f"LSTM model for {country}")
+        print(f"{'='*60}")
+        
+        try:
+            (model, scaler, X_train, X_test, 
+             y_train, y_test, metrics) = train_lstm_model(
+                days, cumulative_cases, 
+                n_steps=n_steps, 
+                test_size=test_size, 
+                epochs=epochs,
+                verbose=0
+            )
+            
+            print("Metrics:")
+            for k, v in metrics.items():
+                print(f"  {k:12s}: {v:.4f}")
+            
+            fig, ax = plt.subplots(figsize=(12, 6))
+            plot_lstm_prediction(days, cumulative_cases, model, scaler, 
+                                n_steps=n_steps, country_name=country, ax=ax)
+            plt.show()
+            
+        except Exception as e:
+            print(f"Error training LSTM for {country}: {e}")
+            import traceback
+            traceback.print_exc()
