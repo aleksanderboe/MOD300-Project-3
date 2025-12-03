@@ -52,7 +52,7 @@ def create_sky_map(center, radius, background):
     )
     fig, ax = plt.subplots(figsize=(5, 5))
     mw.transform(ax)
-    plt.title(f"{center} - Radius: {radius[0]} arcsec")
+    plt.title(f"{center} - Radius: {round(radius[0], 2)} arcsec")
     plt.show()
     return fig, ax
 
