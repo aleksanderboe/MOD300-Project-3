@@ -7,6 +7,9 @@ from sklearn.metrics import r2_score
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error
 
 from ebola_utils import (
     load_ebola_data,
@@ -163,30 +166,6 @@ def overlay_cluster_contours(img_array, label_image, title="Original image with 
     plt.title(title)
     plt.show()
 
-def reconstruct_from_clusters(img_array, label_image, kmeans):
-    """
-    ----------
-    img_array : np.ndarray
-        Original RGB image array of shape (H, W, 3)
-    label_image : np.ndarray
-        2D array of shape (H, W) with integer cluster labels from kmeans_cluster_pixels
-    kmeans : sklearn.cluster.KMeans
-        Fitted KMeans model with cluster centers
-        
-    Returns
-    -------
-    reconstructed : np.ndarray
-        Reconstructed image array of shape (H, W, 3) with uint8 dtype
-    """
-    h, w = label_image.shape
-    centers = kmeans.cluster_centers_
-    
-    reconstructed = centers[label_image.flatten()].reshape(h, w, 3)
-    
-    reconstructed = (reconstructed * 255).astype(np.uint8)
-    
-    return reconstructed
-
 #Task 7
 def run_task7_experiments(img_array, k_values=(3, 5)): 
     """
@@ -209,7 +188,7 @@ def run_task7_experiments(img_array, k_values=(3, 5)):
         
         overlay_cluster_contours(img_array, label_image, title=f"Original image with overlaid K-means contours (k={k})")
 
-# Task 2: Better fitting functions for Ebola data
+# Topic 2, Task 2: Better fitting functions for Ebola data
 def train_polynomial_regression(days, cumulative_cases, degree=2):
     """
     Train a polynomial regression model on cumulative cases vs days.
@@ -384,3 +363,120 @@ def plot_model_comparison(days, cumulative_cases, models_dict, country_name):
     
     plt.tight_layout()
     plt.show()
+
+# Topic 2: Task 3
+def train_neural_network(days, cumulative_cases, hidden_layer_sizes=(32,32), test_size=0.2, random_state=0): 
+    """
+    Train neural network 
+
+    Parameters
+    ----------
+    days: np.ndarray
+        Days since first outbreak 
+    cumulative_cases: np.adarray
+        Cumulative cases
+    hidden_layer_size: tuple
+        Sizes of hidden layers in the MLP
+    test_size: float
+        Fraction of data to keep for testing 
+    random_state: int
+        For reproducibility
+
+    Returns
+    -------
+
+    model: sklearn.neural_network.MLPRegressor
+    x_scaler: 
+    y_scaler: 
+    X_train, X_test, y_train, y_test: np.adarray
+        Train/test splits in original units 
+    metrics: dict 
+        R² and RMSE for train and test sets 
+    """
+    X = days.reshape(-1,1).astype(float)
+    y = cumulative_cases.astype(float)
+
+    n = len(X)
+    n_test = int(np.ceil(test_size * n))
+    n_train = n - n_test
+
+    X_train, X_test = X[:n_train], X[n_train:]
+    y_train, y_test = y[:n_train], y[n_train:]
+
+    x_scaler = StandardScaler()
+    y_scaler = StandardScaler()
+
+    X_train_scaled = x_scaler.fit_transform(X_train)
+    X_test_scaled = x_scaler.transform(X_test)
+
+    y_train_scaled = y_scaler.fit_transform(y_train.reshape(-1, 1)).ravel()
+
+    model = MLPRegressor(hidden_layer_sizes=hidden_layer_sizes, activation="relu", solver="adam", max_iter=5000, random_state=random_state)
+    model.fit(X_train_scaled, y_train_scaled)
+
+    def predict_inverse(X_scaled): 
+        y_scaled_pred = model.predict(X_scaled)
+        return y_scaler.inverse_transform(y_scaled_pred.reshape(-1, 1)).ravel()
+    
+    y_train_pred = predict_inverse(X_train_scaled)
+    y_test_pred = predict_inverse(X_test_scaled)
+
+    metrics = {
+        "train_r2": r2_score(y_train, y_train_pred), 
+        "test_r2": r2_score(y_test, y_test_pred),
+        "train_rmse": np.sqrt(mean_squared_error(y_train, y_train_pred)), 
+        "test_rmse": np.sqrt(mean_squared_error(y_test, y_test_pred)), 
+    }
+
+    return model, x_scaler, y_scaler, X_train, X_test, y_train, y_test, metrics
+
+def plot_neural_network_prediction(days, cumulative_cases, model, x_scaler, y_scaler, country_name, ax=None): 
+    """
+    Plot data points and NN prediction curve over the whole time range. 
+    """
+    if ax is None: 
+        fig, ax = plt.subplots(figsize=(10, 6)) 
+    
+    ax.scatter(days, cumulative_cases, color="black", s=50, label="Data points", zorder=3)
+
+    days_grid = np.linspace(days.min(), days.max(), 200).reshape(-1, 1)
+    days_grid_scaled = x_scaler.transform(days_grid)
+
+    y_grid_scaled = model.predict(days_grid_scaled)
+    y_grid = y_scaler.inverse_transform(y_grid_scaled.reshape(-1, 1)).ravel()
+
+    ax.plot(days_grid.ravel(), y_grid, linewidth=2.5, label="Neural network prediction", color="purple", zorder=2)
+
+    ax.set_xlabel("Days since first outbreak", fontsize=12)
+    ax.set_ylabel("Cumulative cases", fontsize=12)
+    ax.set_title(f"Ebola epidemic in {country_name}: Neural Network Model", fontsize=14, fontweight="bold")
+    ax.legend(fontsize=11, loc="best")
+    ax.grid(True, alpha=0.3)
+
+    return ax
+
+def run_task3_neural_networks(test_size=0.2, hidden_layer_sizes=(32, 32)): 
+    """
+    Function to run task 3. 
+    Train a neural network for each country and plot predictions. 
+    """
+
+    countries_data = load_all_countries_data()
+
+    for country, (days, new_cases, cumulative_cases) in countries_data.items(): 
+        print(f"\n{'='*60}")
+        print(f"Task 3 - Neural network for {country}")
+        print(f"{'='*60}")
+
+        (model, x_scaler, y_scaler, 
+         X_train, X_test, 
+         y_train, y_test, metrics) = train_neural_network(days, cumulative_cases, hidden_layer_sizes=hidden_layer_sizes, test_size=test_size, random_state=0)
+        
+        print("Metrics: ")
+        for k, v in metrics.items(): 
+            print(f"{k:12s}: {v:.4f}")
+        
+        fig, ax = plt.subplots(figsize=(10, 6))
+        plot_neural_network_prediction(days, cumulative_cases, model, x_scaler, y_scaler, country_name=country, ax=ax)
+
+        plt.show()
